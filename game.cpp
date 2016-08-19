@@ -50,7 +50,8 @@ RenderAnimatedGradient(game_offscreen_buffer *Buffer, int RedOffset, int GreenOf
 }
 
 internal void
-GameUpdateAndRender(game_offscreen_buffer *Buffer, int RedOffset, int GreenOffset)
+GameUpdateAndRender(game_offscreen_buffer *Buffer, game_sound_output_buffer *SoundBuffer, int RedOffset, int GreenOffset)
 {
 	RenderAnimatedGradient(Buffer, RedOffset, GreenOffset);
+	GameOutputSound(SoundBuffer);
 }

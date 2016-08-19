@@ -11,9 +11,9 @@ struct game_offscreen_buffer
 
 struct game_sound_output_buffer
 {
-	void *Samples;
+	int16 *Samples;
 	int SamplesPerSecond;
 	int SampleCount;
 };
 internal void 
-GameUpdateAndRender(game_offscreen_buffer *Buffer, int RedOffset, int GreenOffset);
+GameUpdateAndRender(game_offscreen_buffer *Buffer, game_sound_output_buffer *SoundBuffer, int RedOffset, int GreenOffset);

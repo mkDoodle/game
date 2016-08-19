@@ -21,12 +21,13 @@ typedef uint64_t uint64;
 typedef float real32;
 typedef double real64;
 
+#include <math.h>
+
 #include "Game.h"
 #include "Game.cpp"
 
 #include <windows.h>
 #include <dsound.h>
-#include <math.h>
 
 struct win32_window_dimension
 {
@@ -167,6 +168,7 @@ struct win32_sound_output
 	real32 SineWavePeriodSamples;
 	int BytesPerSample;
 	int ToneVolume;
+	int LatencySampleCount;
 	int SecondaryBufferSize;
 };
 
@@ -178,7 +180,7 @@ Win32ClearSoundBuffer(win32_sound_output *SoundOutput)
 	VOID *Region2;
 	DWORD Region2Size;
 	if (SUCCEEDED(GlobalSecondaryBuffer->Lock(
-		ByteToLock, BytesToWrite,
+		0, SoundOutput->SecondaryBufferSize,
 		&Region1, &Region1Size,
 		&Region2, &Region2Size,
 		0)))
@@ -193,7 +195,7 @@ Win32ClearSoundBuffer(win32_sound_output *SoundOutput)
 		}
 
 		DWORD Region2SampleCount = Region2Size;
-		uint8 *DestSample = (uint8 *)Region2;
+		DestSample = (uint8 *)Region2;
 		for (uint32 SampleIndex = 0;
 			SampleIndex < Region2SampleCount;
 			SampleIndex++)
@@ -223,8 +225,8 @@ Win32FillSoundBuffer(win32_sound_output *SoundOutput, DWORD ByteToLock, DWORD By
 			SampleIndex < Region1SampleCount;
 			SampleIndex++)
 		{
-			*DestSample++ = SourceSample++;
-			*DestSample++ = SourceSample++;
+			*DestSample++ = *SourceSample++;
+			*DestSample++ = *SourceSample++;
 			SoundOutput->RunningSampleIndex++;
 		}
 
@@ -234,8 +236,8 @@ Win32FillSoundBuffer(win32_sound_output *SoundOutput, DWORD ByteToLock, DWORD By
 			SampleIndex < Region1SampleCount;
 			SampleIndex++)
 		{
-			*DestSample++ = SourceSample++;
-			*DestSample++ = SourceSample++;
+			*DestSample++ = *SourceSample++;
+			*DestSample++ = *SourceSample++;
 			SoundOutput->RunningSampleIndex++;
 		}
 
@@ -360,6 +362,11 @@ WinMain(HINSTANCE Instance,
 
 		if (Window) 
 		{
+			//Since I specified CS_OWNDC I can just get one device context and use it forever
+			//because I'm not sharing it with anyone
+			//no release required
+			HDC DeviceContext = GetDC(Window);
+			
 			//Sound test
 			win32_sound_output SoundOutput = {};
 			
@@ -370,27 +377,19 @@ WinMain(HINSTANCE Instance,
 			SoundOutput.SineWavePeriodSamples = SoundOutput.SineWavePeriodSeconds * SoundOutput.SamplesPerSecond;
 			SoundOutput.BytesPerSample = sizeof(int16) * 2;
 			SoundOutput.ToneVolume = 3000;
+			SoundOutput.LatencySampleCount = SoundOutput.SamplesPerSecond / 15;
 			SoundOutput.SecondaryBufferSize = SoundOutput.SamplesPerSecond * SoundOutput.BytesPerSample;
 
 			Win32InitDSound(Window, SoundOutput.SamplesPerSecond, SoundOutput.SecondaryBufferSize);
-			Win32ClearSoundBuffer();
+			Win32ClearSoundBuffer(&SoundOutput);
 
 			GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
 
-			//Graphics Code
-			game_offscreen_buffer Buffer = {};
-			Buffer.Memory = GlobalBuffer.Memory;
-			Buffer.Width = GlobalBuffer.Width;
-			Buffer.Height = GlobalBuffer.Height;
-			Buffer.Pitch = GlobalBuffer.Pitch;
-			RenderAnimatedGradient(&Buffer, XOffset, YOffset);
-
-			//Since I specified CS_OWNDC I can just get one device context and use it forever
-			//because I'm not sharing it with anyone
-			//no release required
-			HDC DeviceContext = GetDC(Window);
 
 			GlobalRunning = true;
+
+			int16 *Samples = (int16 *)VirtualAlloc(0, SoundOutput.SecondaryBufferSize, 
+										  MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 
 			//Graphics Test
 			int XOffset = 0;
@@ -410,42 +409,58 @@ WinMain(HINSTANCE Instance,
 					DispatchMessageA(&Message);
 				}
 
-				win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 
-				DWORD PlayCursor;
-				DWORD WriteCursor;
+				DWORD ByteToLock = 0;
+				DWORD TargetCursor = 0;
+				DWORD BytesToWrite = 0;  
+				DWORD PlayCursor = 0;
+				DWORD WriteCursor = 0;
+				bool32 SoundIsValid = false;
+
 				if (SUCCEEDED(GlobalSecondaryBuffer->GetCurrentPosition(&PlayCursor, &WriteCursor)))
 				{
 
-					DWORD ByteToLock = (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
-					DWORD BytesToWrite;
+					ByteToLock = (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) % 
+									SoundOutput.SecondaryBufferSize;
 
-					if (ByteToLock == PlayCursor)
+					TargetCursor = (PlayCursor + 
+								    (SoundOutput.LatencySampleCount * SoundOutput.BytesPerSample))
+								      % SoundOutput.SecondaryBufferSize;
+					
+					if (ByteToLock > TargetCursor)
 					{
-						if (GlobalSoundIsPlaying)
-						{
-							BytesToWrite = 0;
-						}
-						else
-						{
-							BytesToWrite = SoundOutput.SecondaryBufferSize;
-						}
-					}
-					else if (ByteToLock > PlayCursor)
-					{
-						BytesToWrite = SoundOutput.SecondaryBufferSize - ByteToLock;
-						BytesToWrite += PlayCursor;
-					}
+						BytesToWrite = (SoundOutput.SecondaryBufferSize - ByteToLock);
+						BytesToWrite += TargetCursor;
+					}	
 					else
 					{
-						BytesToWrite = PlayCursor - ByteToLock;
+						BytesToWrite = TargetCursor - ByteToLock; 
 					}
 
-					Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite);
+					SoundIsValid = true;
+				}
+
+				game_sound_output_buffer SoundBuffer = {};
+				SoundBuffer.SamplesPerSecond = SoundOutput.SamplesPerSecond;
+				SoundBuffer.SampleCount = BytesToWrite / SoundOutput.BytesPerSample;
+				SoundBuffer.Samples = Samples;
+				
+				//Graphics Code
+				game_offscreen_buffer Buffer = {};
+				Buffer.Memory = GlobalBuffer.Memory;
+				Buffer.Width = GlobalBuffer.Width;
+				Buffer.Height = GlobalBuffer.Height;
+				Buffer.Pitch = GlobalBuffer.Pitch;
+				
+				GameUpdateAndRender(&Buffer, &SoundBuffer, XOffset, YOffset);
+
+				if(SoundIsValid)
+				{
+					Win32FillSoundBuffer(&SoundOutput, ByteToLock, BytesToWrite, &SoundBuffer);
 				}
 
 				
-
+				win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 				Win32DisplayBufferInWindow(GlobalBuffer, Dimension, DeviceContext);
 
 				//Move the backbuffer around
