@@ -28,6 +28,7 @@ typedef double real64;
 
 #include <windows.h>
 #include <dsound.h>
+#include <xinput.h>
 
 struct win32_window_dimension
 {
@@ -44,16 +45,58 @@ struct win32_offscreen_buffer
 	int Pitch;
 };
 
-global bool GlobalRunning;
-global win32_offscreen_buffer GlobalBuffer;
-global bool GlobalUp;
-global bool GlobalLeft;
-global LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
-global bool GlobalSoundIsPlaying;
+#define XINPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
+typedef XINPUT_GET_STATE(xinput_get_state);
+XINPUT_GET_STATE(XInputGetStateStub)
+{
+	return (ERROR_DEVICE_NOT_CONNECTED);
+}
+global xinput_get_state *XInputGetState_ = XInputGetStateStub;
+#define XInputGetState XInputGetState_
+
+#define XINPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
+typedef XINPUT_SET_STATE(xinput_set_state);
+XINPUT_SET_STATE(XInputSetStateStub)
+{
+	return (ERROR_DEVICE_NOT_CONNECTED);
+}
+global xinput_set_state *XInputSetState_ = XInputSetStateStub;
+#define XInputSetState XInputSetState_ 
+
+internal void
+Win32LoadXInput()
+{
+	HMODULE XInputLibrary = LoadLibraryA("xinput1_4.dll");
+
+	if(!XInputLibrary)
+	{
+		XInputLibrary = LoadLibraryA("xinput1_3.dll");
+	} 
+
+	if(XInputLibrary)
+	{
+		XInputGetState = (xinput_get_state *)GetProcAddress(XInputLibrary, "XInputGetState");
+		if(!XInputGetState)
+		{
+			XInputGetState = XInputGetStateStub;
+		}
+
+		XInputSetState = (xinput_set_state *)GetProcAddress(XInputLibrary, "XInputSetState");
+		if(!XInputSetState)
+		{
+			XInputSetState = XInputSetStateStub;
+		}
+	}
+}
 
 
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
+
+global bool GlobalRunning;
+global win32_offscreen_buffer GlobalBuffer;
+global LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
+global bool GlobalSoundIsPlaying;
 
 internal win32_window_dimension
 Win32GetWindowDimension(HWND Window)
@@ -296,22 +339,18 @@ WindowProc(
 			{
 				case 'W':
 				{
-					GlobalUp = true;
 				} break;
 
 				case 'A':
 				{
-					GlobalLeft = true;
 				} break;
 
 				case 'S':
 				{
-					GlobalUp = false;
 				} break;
 
 				case 'D':
 				{
-					GlobalLeft = false;
 				} break;
 			}
 		}
@@ -332,6 +371,8 @@ WinMain(HINSTANCE Instance,
 		LPSTR     lpCmdLine,
 		int       nCmdShow) 
 {
+	Win32LoadXInput();
+
 	WNDCLASSA WindowClass = {};
 	
 	Win32ResizeDIBSection(&GlobalBuffer, 1280, 720);
@@ -364,6 +405,7 @@ WinMain(HINSTANCE Instance,
 			//because I'm not sharing it with anyone
 			//no release required
 			HDC DeviceContext = GetDC(Window);
+
 			
 			//Sound test
 			win32_sound_output SoundOutput = {};
@@ -401,6 +443,43 @@ WinMain(HINSTANCE Instance,
 
 					TranslateMessage(&Message);
 					DispatchMessageA(&Message);
+				}
+
+				for(DWORD ControllerIndex = 0;
+					ControllerIndex < XUSER_MAX_COUNT;
+					ControllerIndex++)
+				{
+					XINPUT_STATE ControllerState;
+					if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
+					{
+						//This controller is plugged in
+						XINPUT_GAMEPAD *Pad = &ControllerState.Gamepad;
+
+						bool32 Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
+						bool32 Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
+						bool32 Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
+						bool32 Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
+						bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
+						bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
+						bool32 LeftShoulder = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
+						bool32 RightShoulder = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
+						bool32 AButton = (Pad->wButtons & XINPUT_GAMEPAD_A);
+						bool32 BButton = (Pad->wButtons & XINPUT_GAMEPAD_B);
+						bool32 XButton = (Pad->wButtons & XINPUT_GAMEPAD_X);
+						bool32 YButton = (Pad->wButtons & XINPUT_GAMEPAD_Y);
+
+						//TODO: implement Deadzone
+						uint8 LeftTrigger = Pad->bLeftTrigger;
+						uint8 RightTrigger = Pad->bRightTrigger;
+						//TODO: implement Deadzone	
+						int16 LeftStickX = Pad->sThumbLX;
+						int16 LeftStickY = Pad->sThumbLY;
+						int16 RightStickX = Pad->sThumbRX;
+						int16 RightStickY = Pad->sThumbRY;
+
+						XOffset -= LeftStickX >> 12;
+						YOffset += LeftStickY >> 12;
+					}
 				}
 
 
@@ -452,29 +531,9 @@ WinMain(HINSTANCE Instance,
 				{
 					Win32FillSoundBuffer(&SoundOutput, &SoundBuffer, ByteToLock, BytesToWrite);
 				}
-
 				
 				win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 				Win32DisplayBufferInWindow(GlobalBuffer, Dimension, DeviceContext);
-
-				//Move the backbuffer around
-				if (GlobalLeft)
-				{
-					XOffset ++;
-				}
-				else if (!GlobalLeft)
-				{
-					XOffset --;
-				}
-
-				if (GlobalUp)
-				{
-					YOffset ++;
-				}
-				else if (!GlobalUp)
-				{
-					YOffset --;
-				}
 			}
 		}
 	}
