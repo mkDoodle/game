@@ -23,27 +23,14 @@ typedef double real64;
 
 #include <math.h>
 
-#include "Game.h"
-#include "Game.cpp"
+#include "game.h"
+#include "game.cpp"
 
 #include <windows.h>
 #include <dsound.h>
 #include <xinput.h>
 
-struct win32_window_dimension
-{
-	int Width;
-	int Height;
-};
-
-struct win32_offscreen_buffer
-{
-	BITMAPINFO Info;
-	void *Memory;
-	int Width;
-	int Height;
-	int Pitch;
-};
+#include "win32_game.h"
 
 #define XINPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
 typedef XINPUT_GET_STATE(xinput_get_state);
@@ -202,15 +189,6 @@ Win32DisplayBufferInWindow(win32_offscreen_buffer Buffer, win32_window_dimension
 		);
 }
 
-struct win32_sound_output
-{
-	int SamplesPerSecond;
-	uint32 RunningSampleIndex;
-	int BytesPerSample;
-	int LatencySampleCount;
-	int SecondaryBufferSize;
-};
-
 internal void
 Win32ClearSoundBuffer(win32_sound_output *SoundOutput)
 {
@@ -285,6 +263,7 @@ Win32FillSoundBuffer(win32_sound_output *SoundOutput, game_sound_output_buffer *
 		GlobalSecondaryBuffer->Unlock(Region1, Region1Size, Region2, Region2Size);
 	}
 }
+
 
 
 internal LRESULT CALLBACK 
@@ -364,6 +343,14 @@ WindowProc(
 	return(Result);
 }
 
+internal void
+Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
+								game_button_state *OldState, DWORD ButtonBit,
+								game_button_state *NewState)
+{
+	NewState->EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
+	NewState->TransitionCount = (OldState->EndedDown != NewState->EndedDown ? 1 :0);
+}
 
 int CALLBACK 
 WinMain(HINSTANCE Instance,
@@ -382,7 +369,7 @@ WinMain(HINSTANCE Instance,
 	WindowClass.hInstance = Instance;
 	//WindowClass.hIcon = ;
 	WindowClass.lpszClassName = "My Window Class";
-
+ 
 	if (RegisterClassA(&WindowClass)) {
 
 		HWND Window = CreateWindowExA(
@@ -427,9 +414,9 @@ WinMain(HINSTANCE Instance,
 			int16 *Samples = (int16 *)VirtualAlloc(0, SoundOutput.SecondaryBufferSize, 
 										  MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 
-			//Graphics Test
-			int XOffset = 0;
-			int YOffset = 0;
+			game_input Input[2] = {};
+			game_input *NewInput = &Input[0];
+			game_input *OldInput = &Input[1];
 
 			while(GlobalRunning) 
 			{
@@ -449,6 +436,9 @@ WinMain(HINSTANCE Instance,
 					ControllerIndex < XUSER_MAX_COUNT;
 					ControllerIndex++)
 				{
+					game_controller_input *OldController = &OldInput->Controllers[ControllerIndex];
+					game_controller_input *NewController = &NewInput->Controllers[ControllerIndex];
+
 					XINPUT_STATE ControllerState;
 					if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
 					{
@@ -459,26 +449,65 @@ WinMain(HINSTANCE Instance,
 						bool32 Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
 						bool32 Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
 						bool32 Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
-						bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
-						bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
-						bool32 LeftShoulder = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
-						bool32 RightShoulder = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
-						bool32 AButton = (Pad->wButtons & XINPUT_GAMEPAD_A);
-						bool32 BButton = (Pad->wButtons & XINPUT_GAMEPAD_B);
-						bool32 XButton = (Pad->wButtons & XINPUT_GAMEPAD_X);
-						bool32 YButton = (Pad->wButtons & XINPUT_GAMEPAD_Y);
 
-						//TODO: implement Deadzone
-						uint8 LeftTrigger = Pad->bLeftTrigger;
-						uint8 RightTrigger = Pad->bRightTrigger;
+						NewController->IsAnalogue = true;
+						NewController->StartX = OldController->EndX;
+						NewController->StartY = OldController->EndY;
+
+						real32 X;
+
+						if(Pad->sThumbLX < 0)
+						{
+							//normalise the stick input 
+							X = (real32)Pad->sThumbLX / 32768;
+						}
+						else {
+							X = (real32)Pad->sThumbLX / 32767;
+						}
+						NewController->MinX = NewController->MaxX = NewController->EndX = X;
+
+						real32 Y;
+						if(Pad->sThumbLY < 0)
+						{
+							Y = (real32)Pad->sThumbLY / 32768;
+						}
+						else
+						{
+							Y = (real32)Pad->sThumbLY / 32767;
+						}
+						NewController->MinY = NewController->MaxY = NewController->EndY = Y;
+
 						//TODO: implement Deadzone	
 						int16 LeftStickX = Pad->sThumbLX;
 						int16 LeftStickY = Pad->sThumbLY;
 						int16 RightStickX = Pad->sThumbRX;
 						int16 RightStickY = Pad->sThumbRY;
+						
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&OldController->A, XINPUT_GAMEPAD_A,
+														&NewController->A);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&OldController->B, XINPUT_GAMEPAD_B,
+														&NewController->B);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&OldController->X, XINPUT_GAMEPAD_X,
+														&NewController->X);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&OldController->Y, XINPUT_GAMEPAD_Y,
+														&NewController->Y);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&OldController->LeftShoulder, XINPUT_GAMEPAD_LEFT_SHOULDER,
+														&NewController->LeftShoulder);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&OldController->RightShoulder, XINPUT_GAMEPAD_RIGHT_SHOULDER,
+														&NewController->RightShoulder);
 
-						XOffset -= LeftStickX >> 12;
-						YOffset += LeftStickY >> 12;
+						//bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
+						//bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
+				
+						//TODO: implement Deadzone
+						//uint8 LeftTrigger = Pad->bLeftTrigger;
+						//uint8 RightTrigger = Pad->bRightTrigger;
 					}
 				}
 
@@ -525,7 +554,7 @@ WinMain(HINSTANCE Instance,
 				Buffer.Height = GlobalBuffer.Height;
 				Buffer.Pitch = GlobalBuffer.Pitch;
 				
-				GameUpdateAndRender(&Buffer, &SoundBuffer, XOffset, YOffset);
+				GameUpdateAndRender(NewInput, &Buffer, &SoundBuffer);
 
 				if(SoundIsValid)
 				{
@@ -534,6 +563,10 @@ WinMain(HINSTANCE Instance,
 				
 				win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 				Win32DisplayBufferInWindow(GlobalBuffer, Dimension, DeviceContext);
+
+				game_input *Temp = NewInput;
+				NewInput = OldInput;
+				OldInput = Temp;
 			}
 		}
 	}
