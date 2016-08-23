@@ -8,7 +8,7 @@ GameOutputSound(game_sound_output_buffer *SoundBuffer, int ToneHz)
 
 	int16 *SampleOut = SoundBuffer->Samples;
 
-	for (uint32 SampleIndex = 0;
+	for (int SampleIndex = 0;
 		SampleIndex < SoundBuffer->SampleCount;
 		++SampleIndex)
 	{
@@ -37,8 +37,8 @@ RenderAnimatedGradient(game_offscreen_buffer *Buffer, int RedOffset, int GreenOf
 		uint32 *Pixel = (uint32 *)Row;
 		for (int X = 0; X < Buffer->Width; X++)
 		{
-			uint8 Green = X + RedOffset;
-			uint8 Red = Y + GreenOffset;
+			uint8 Green = (uint8)(X + RedOffset);
+			uint8 Red = (uint8)(Y + GreenOffset);
 			 
 			//Layout in memory is 0x xx RR GG BB
 			*Pixel++ = (Red << 16) | (Green << 8);
@@ -52,12 +52,23 @@ internal void
 GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer, 
 					game_sound_output_buffer *SoundBuffer)
 {
+	Assert(sizeof(game_state) <= Memory->PermanentStorageSize);
+
 	game_state *GameState = (game_state *)Memory->PermanentStorage;
 	if(!Memory->IsInitialised)
 	{
+		char *Filename = __FILE__;
+
+		debug_read_file_result File = DEBUGPlatformReadEntireFile(Filename);
+		if(File.Contents)
+		{
+			DEBUGPlatformWriteEntireFile("test.out", File.ContentsSize, File.Contents);
+			DEBUGPlatformFreeFileMemory(File.Contents);
+		}
+
 		GameState->ToneHz = 256;
 
-//this might be more appropriate to do in the platform layer
+		//this might be more appropriate to do in the platform layer
 		Memory->IsInitialised = true;
 	}
 
@@ -66,7 +77,7 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	if(Input0->IsAnalogue)
 	{
 		//Use analogue movement tuning
-		GameState->RedOffset +=  (int)4.0f * (Input0->EndX);
+		GameState->RedOffset +=  (int)(4.0f * (Input0->EndX));
 		GameState->ToneHz = 256 + (int)(128.0f * (Input0->EndY));  
 	}
 	else

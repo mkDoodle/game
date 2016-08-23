@@ -26,7 +26,30 @@
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
+inline uint32
+SafeTruncateUInt64(uint64 Value)
+{
+	Assert(Value <= 0xFFFFFFFF);
+	uint32 Result = (uint32)Value;
+	return Result;
+}
+
 //Services that the platform layer provides to the game
+#if GAME_INTERNAL
+/*	IMPORTANT
+
+	These are NOT for doing anything in the shipping game! They are blocking and do not protect against lost data
+*/
+struct debug_read_file_result
+{
+	uint32 ContentsSize;
+	void *Contents;
+};
+
+internal debug_read_file_result DEBUGPlatformReadEntireFile(char *Filename);
+internal void DEBUGPlatformFreeFileMemory(void *Memory);
+internal bool32 DEBUGPlatformWriteEntireFile(char *Filename, uint32 MemorySize, void *Memory);
+#endif
 
 //Services that the game provides to the platform layer
 struct game_offscreen_buffer
@@ -88,12 +111,6 @@ struct game_input
 	game_controller_input Controllers[4];
 };
 
-struct game_state
-{
-	int RedOffset;
-	int GreenOffset;
-	int ToneHz;
-};
 
 struct game_memory
 {
@@ -109,3 +126,13 @@ struct game_memory
 internal void 
 GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer, 
 					game_sound_output_buffer *SoundBuffer);
+
+
+
+
+struct game_state
+{
+	int RedOffset;
+	int GreenOffset;
+	int ToneHz;
+};
