@@ -380,26 +380,12 @@ WindowProc(
 			EndPaint(Window, &Paint);
 		} break;
 
+		case WM_SYSKEYDOWN:
+		case WM_SYSKEYUP:
 		case WM_KEYDOWN:
+		case WM_KEYUP:
 		{
-			switch (WParam)
-			{
-				case 'W':
-				{
-				} break;
-
-				case 'A':
-				{
-				} break;
-
-				case 'S':
-				{
-				} break;
-
-				case 'D':
-				{
-				} break;
-			}
+			Assert(!"Keyboard input came in through a non-dispatch message!")
 		}
 
 		default:
@@ -418,6 +404,69 @@ Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
 {
 	NewState->EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
 	NewState->TransitionCount = (OldState->EndedDown != NewState->EndedDown ? 1 :0);
+}
+
+internal void
+Win32ProcessKeyboardDigitalButton(game_button_state *NewState, bool32 IsDown)
+{
+	NewState->EndedDown = IsDown;
+	++NewState->TransitionCount;
+}
+internal void
+Win32ProcessPendingMessages(HWND Window, game_keyboard_input *Keyboard)
+{
+	MSG Message;
+	while(PeekMessageA(&Message, Window, 0, 0, PM_REMOVE))
+	{
+		if (Message.message == WM_QUIT)
+		{
+			GlobalRunning = false;
+		}
+
+		switch(Message.message)
+		{
+			case WM_QUIT:
+			{
+				GlobalRunning = false;
+			} break;
+
+			case WM_SYSKEYDOWN:
+			case WM_SYSKEYUP:
+			case WM_KEYDOWN:
+			case WM_KEYUP:
+			{
+				uint32 VKCode = (uint32)Message.wParam;
+				bool32 WasDown = ((Message.lParam & 1 << 30) != 0);
+				bool32 IsDown = ((Message.lParam & 1 << 31) == 0);
+		
+				if(WasDown != IsDown)
+				{
+					if(VKCode == 'W')
+					{
+						Win32ProcessKeyboardDigitalButton(&Keyboard->Up, IsDown);
+					}
+					else if(VKCode == 'A')
+					{
+						Win32ProcessKeyboardDigitalButton(&Keyboard->Left, IsDown);
+					}
+					else if(VKCode == 'S')
+					{
+						Win32ProcessKeyboardDigitalButton(&Keyboard->Down, IsDown);
+					}
+					else if(VKCode == 'D')
+					{
+						Win32ProcessKeyboardDigitalButton(&Keyboard->Right, IsDown);
+					}	
+				}
+			} break;
+
+			default:
+			{
+				TranslateMessage(&Message);
+				DispatchMessageA(&Message);
+			}
+		}
+	}
 }
 
 int CALLBACK 
@@ -502,17 +551,7 @@ WinMain(HINSTANCE Instance,
 
 				while(GlobalRunning) 
 				{
-					MSG Message;
-					while(PeekMessageA(&Message, Window, 0, 0, PM_REMOVE))
-					{
-						if (Message.message == WM_QUIT)
-						{
-							GlobalRunning = false;
-						}
-
-						TranslateMessage(&Message);
-						DispatchMessageA(&Message);
-					}
+					Win32ProcessPendingMessages(Window, &NewInput->Keyboard);
 
 					int MaxControllerCount = XUSER_MAX_COUNT;
 					if(MaxControllerCount > ArrayCount(NewInput->Controllers))
@@ -542,26 +581,29 @@ WinMain(HINSTANCE Instance,
 							NewController->StartX = OldController->EndX;
 							NewController->StartY = OldController->EndY;
 
-							real32 X;
+							real32 X = 0;
 
-							if(Pad->sThumbLX < 0)
+							if(Pad->sThumbLX < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
 							{
 								//normalise the stick input 
-								X = (real32)Pad->sThumbLX / 32768;
+								X = (real32)((Pad->sThumbLX + XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32768.0f - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));  	
 							}
-							else {
-								X = (real32)Pad->sThumbLX / 32767;
+							else if (Pad->sThumbLX > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+							{
+								X = (real32)((Pad->sThumbLX - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32767.0f  - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));
 							}
 							NewController->MinX = NewController->MaxX = NewController->EndX = X;
 
-							real32 Y;
-							if(Pad->sThumbLY < 0)
+							real32 Y = 0;
+							
+							if(Pad->sThumbLY < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
 							{
-								Y = (real32)Pad->sThumbLY / 32768;
+								//normalise the stick input 
+								Y = (real32)((Pad->sThumbLY + XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32768.0f - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));  	
 							}
-							else
+							else if (Pad->sThumbLY > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
 							{
-								Y = (real32)Pad->sThumbLY / 32767;
+								Y = (real32)((Pad->sThumbLY - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32767.0f  - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));
 							}
 							NewController->MinY = NewController->MaxY = NewController->EndY = Y;
 
@@ -571,6 +613,10 @@ WinMain(HINSTANCE Instance,
 							int16 RightStickX = Pad->sThumbRX;
 							int16 RightStickY = Pad->sThumbRY;
 							
+							//Not sure if I like this, maybe to start with only use analoguye stick in controller for movement and only 
+							//WASD on keyboard
+							//Eliminate ABXY on controller for now??
+#if 0
 							Win32ProcessXInputDigitalButton(Pad->wButtons, 
 															&OldController->A, XINPUT_GAMEPAD_A,
 															&NewController->A);
@@ -583,6 +629,7 @@ WinMain(HINSTANCE Instance,
 							Win32ProcessXInputDigitalButton(Pad->wButtons, 
 															&OldController->Y, XINPUT_GAMEPAD_Y,
 															&NewController->Y);
+#endif															
 							Win32ProcessXInputDigitalButton(Pad->wButtons, 
 															&OldController->LeftShoulder, XINPUT_GAMEPAD_LEFT_SHOULDER,
 															&NewController->LeftShoulder);
@@ -655,6 +702,9 @@ WinMain(HINSTANCE Instance,
 					game_input *Temp = NewInput;
 					NewInput = OldInput;
 					OldInput = Temp;
+
+					//clear NewInput for use next frame
+					*NewInput = {};
 				}
 			}
 

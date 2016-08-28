@@ -1,3 +1,4 @@
+//TODO Fix issue where sound suddenyl outputs at a higher frequency
 internal void
 GameOutputSound(game_sound_output_buffer *SoundBuffer, int ToneHz)
 {
@@ -72,23 +73,39 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 		Memory->IsInitialised = true;
 	}
 
-	game_controller_input *Input0 = &Input->Controllers[0];
+	//temp hardcoded latch to use controller
+	Input->IsController = true;
 
-	if(Input0->IsAnalogue)
+	if(Input->IsController)
 	{
-		//Use analogue movement tuning
-		GameState->RedOffset +=  (int)(4.0f * (Input0->EndX));
-		GameState->ToneHz = 256 + (int)(128.0f * (Input0->EndY));  
+		game_controller_input *Input0 = &Input->Controllers[0];
+
+		if(Input0->IsAnalogue)
+		{
+			//Use analogue movement tuning
+			GameState->RedOffset +=  (int)(4.0f * (Input0->EndX));
+			GameState->ToneHz = 256 + (int)(128.0f * (Input0->EndY));  
+		}
+		else
+		{
+			//use digital movement tuning
+		}
+
+		if(Input0->A.EndedDown)
+		{
+			GameState->GreenOffset += 1;
+		}
 	}
 	else
 	{
-		//use digital movement tuning
-	}
+		game_keyboard_input *Keyboard = &Input->Keyboard;
 
-	if(Input0->A.EndedDown)
-	{
-		GameState->GreenOffset += 1;
+		if(Keyboard->Up.EndedDown)
+		{
+			GameState->RedOffset += 4;
+		}
 	}
+	
 
 	RenderAnimatedGradient(Buffer, GameState->RedOffset, GameState->GreenOffset);
 	GameOutputSound(SoundBuffer, GameState->ToneHz);

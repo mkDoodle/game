@@ -98,7 +98,7 @@ struct game_controller_input
 			game_button_state A;
 			game_button_state B;
 			game_button_state X;
-			game_button_state Y;
+			game_button_state Y;		
 			game_button_state LeftShoulder;
 			game_button_state RightShoulder;
 		};
@@ -106,9 +106,20 @@ struct game_controller_input
 
 };
 
+struct game_keyboard_input
+{
+	game_button_state Up;
+	game_button_state Down;
+	game_button_state Left;
+	game_button_state Right;
+};
+
 struct game_input
 {
+	bool32 IsController;
+
 	game_controller_input Controllers[4];
+	game_keyboard_input Keyboard;
 };
 
 
