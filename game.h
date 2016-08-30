@@ -55,6 +55,7 @@ internal bool32 DEBUGPlatformWriteEntireFile(char *Filename, uint32 MemorySize, 
 struct game_offscreen_buffer
 {
 	void* Memory;
+	int BytesPerPixel;
 	int Width;
 	int Height;
 	int Pitch;

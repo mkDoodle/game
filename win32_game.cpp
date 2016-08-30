@@ -183,9 +183,9 @@ Win32ResizeDIBSection(win32_offscreen_buffer *Buffer, int Width, int Height)
 
 	Buffer->Width = Width;
 	Buffer->Height = Height;
-	int BytesPerPixel = 4;
-	Buffer->Pitch = Width * BytesPerPixel;
-	int BufferSize = (Width*Height) * BytesPerPixel;
+	Buffer->BytesPerPixel = 4;
+	Buffer->Pitch = Width * Buffer->BytesPerPixel;
+	int BufferSize = (Width*Height) * Buffer->BytesPerPixel;
 
 	Buffer->Memory = VirtualAlloc(0, BufferSize, MEM_COMMIT, PAGE_READWRITE);
 }
@@ -685,10 +685,13 @@ WinMain(HINSTANCE Instance,
 					//Graphics Code
 					game_offscreen_buffer Buffer = {};
 					Buffer.Memory = GlobalBuffer.Memory;
+					Buffer.BytesPerPixel = GlobalBuffer.BytesPerPixel;
 					Buffer.Width = GlobalBuffer.Width;
 					Buffer.Height = GlobalBuffer.Height;
 					Buffer.Pitch = GlobalBuffer.Pitch;
 					
+					
+					//PatBlt(DeviceContext, 0, 0, GlobalBuffer.Width, GlobalBuffer.Height, BLACKNESS);
 					GameUpdateAndRender(&GameMemory ,NewInput, &Buffer, &SoundBuffer);
 
 					if(SoundIsValid)

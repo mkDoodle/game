@@ -1,4 +1,33 @@
-//TODO Fix issue where sound suddenyl outputs at a higher frequency
+internal void
+DrawRentangle(game_offscreen_buffer *Buffer, 
+			  int MinX, int MinY, int MaxX, int MaxY,
+			  int R, int G, int B)
+{
+	
+	
+	uint8 *Row = (uint8 *)Buffer->Memory + (MinX * Buffer->BytesPerPixel)  + (MinY * Buffer->Pitch);
+
+	//TODO: test if this will go up en entirity of the square of if condition should be <=
+	for (int Y = MinY; 
+		 Y < MaxY;
+		 Y++)
+	{
+		uint32 *Pixel = (uint32 *)Row;
+		
+		for (int X = MinX;
+			 X < MaxX;
+			 X++)
+		{	 
+			//Layout in memory is 0x xx RR GG BB
+			*Pixel++ = (R << 16) | (G << 8)| (B);
+		}
+
+		Row += Buffer->Pitch;
+	}
+}
+
+
+//TODO Fix issue where sound suddenly outputs at a higher frequency
 internal void
 GameOutputSound(game_sound_output_buffer *SoundBuffer, int ToneHz)
 {
@@ -28,7 +57,8 @@ GameOutputSound(game_sound_output_buffer *SoundBuffer, int ToneHz)
 	}
 }
 
-internal void
+
+/*internal void
 RenderAnimatedGradient(game_offscreen_buffer *Buffer, int RedOffset, int GreenOffset)
 {
 	uint8 *Row = (uint8 *)Buffer->Memory;
@@ -47,7 +77,7 @@ RenderAnimatedGradient(game_offscreen_buffer *Buffer, int RedOffset, int GreenOf
 
 		Row += Buffer->Pitch;
 	}
-}
+}*/
 
 internal void
 GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffer *Buffer, 
@@ -73,8 +103,14 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 		Memory->IsInitialised = true;
 	}
 
-	//temp hardcoded latch to use controller
-	Input->IsController = true;
+	//some player variables
+	local_persist int MinX = 10;
+	local_persist int MinY = 10;
+	local_persist int MaxX = 110;
+	local_persist int MaxY = 110;
+
+	//temp hardcoded latch between keyboarda and controller
+	Input->IsController = false;
 
 	if(Input->IsController)
 	{
@@ -102,11 +138,33 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 
 		if(Keyboard->Up.EndedDown)
 		{
-			GameState->RedOffset += 4;
+			MinY -= 10;
+			MaxY -= 10;
 		}
+		else if(Keyboard->Down.EndedDown)
+		{
+			MinY += 10;
+			MaxY += 10;
+		}
+		else if(Keyboard->Left.EndedDown)
+		{
+			MinX -= 10;
+			MaxX -= 10;
+		}
+		else if(Keyboard->Right.EndedDown)
+		{
+			MinX += 10;
+			MaxX += 10;
+		}
+
+
 	}
 	
 
-	RenderAnimatedGradient(Buffer, GameState->RedOffset, GameState->GreenOffset);
+	//RenderAnimatedGradient(Buffer, GameState->RedOffset, GameState->GreenOffset);
+	
+	
+	DrawRentangle(Buffer, 0, 0, Buffer->Width, Buffer->Height, 0, 0, 0);
+	DrawRentangle(Buffer, MinX, MinY, MaxX, MaxY, 255, 0, 0);
 	GameOutputSound(SoundBuffer, GameState->ToneHz);
 }
