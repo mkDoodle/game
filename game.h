@@ -70,26 +70,14 @@ struct game_sound_output_buffer
 
 struct game_button_state
 {
-	//One transition between up/down on a digital button
-	int TransitionCount;
 	bool32 EndedDown;
 };
 struct game_controller_input 
 {
 	bool32 IsAnalogue;
 
-	//Left Stick
-	real32 StartX;
-	real32 StartY;
-
-	real32 MinX;
-	real32 MinY;
-
-	real32 MaxX;
-	real32 MaxY;
-
-	real32 EndX;
-	real32 EndY;
+	real32 StickX;
+	real32 StickY;
 
 	union
 	{
@@ -119,7 +107,7 @@ struct game_input
 {
 	bool32 IsController;
 
-	game_controller_input Controllers[4];
+	game_controller_input Controller;
 	game_keyboard_input Keyboard;
 };
 

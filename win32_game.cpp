@@ -21,6 +21,8 @@ typedef uint64_t uint64;
 typedef float real32;
 typedef double real64;
 
+global bool GlobalRunning;
+
 #include <math.h>
 
 #include "game.h"
@@ -148,7 +150,6 @@ Win32LoadXInput()
 #define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter)
 typedef DIRECT_SOUND_CREATE(direct_sound_create);
 
-global bool GlobalRunning;
 global win32_offscreen_buffer GlobalBuffer;
 global LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
 global bool GlobalSoundIsPlaying;
@@ -399,18 +400,15 @@ WindowProc(
 
 internal void
 Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
-								game_button_state *OldState, DWORD ButtonBit,
-								game_button_state *NewState)
+								game_button_state *State, DWORD ButtonBit)
 {
-	NewState->EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
-	NewState->TransitionCount = (OldState->EndedDown != NewState->EndedDown ? 1 :0);
+	State->EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
 }
 
 internal void
-Win32ProcessKeyboardDigitalButton(game_button_state *NewState, bool32 IsDown)
+Win32ProcessKeyboardDigitalButton(game_button_state *State, bool32 IsDown)
 {
-	NewState->EndedDown = IsDown;
-	++NewState->TransitionCount;
+	State->EndedDown = IsDown;
 }
 internal void
 Win32ProcessPendingMessages(HWND Window, game_keyboard_input *Keyboard)
@@ -545,106 +543,82 @@ WinMain(HINSTANCE Instance,
 			if(Samples && GameMemory.PermanentStorage)
 			{
 
-				game_input Input[2] = {};
-				game_input *NewInput = &Input[0];
-				game_input *OldInput = &Input[1];
+				game_input Input = {};
+
 
 				while(GlobalRunning) 
 				{
-					Win32ProcessPendingMessages(Window, &NewInput->Keyboard);
+					LARGE_INTEGER StartCounter;
+					QueryPerformanceCounter(&StartCounter);
 
-					int MaxControllerCount = XUSER_MAX_COUNT;
-					if(MaxControllerCount > ArrayCount(NewInput->Controllers))
+					Win32ProcessPendingMessages(Window, &Input.Keyboard);	
+			
+					game_controller_input *Controller = &Input.Controller;					
+
+					XINPUT_STATE ControllerState;
+					if (XInputGetState(0, &ControllerState) == ERROR_SUCCESS)
 					{
-						MaxControllerCount = ArrayCount(NewInput->Controllers);
-					}	
+						//This controller is plugged in
+						XINPUT_GAMEPAD *Pad = &ControllerState.Gamepad;
 
-					for(DWORD ControllerIndex = 0;
-						ControllerIndex < XUSER_MAX_COUNT;
-						ControllerIndex++)
-					{
-						game_controller_input *OldController = &OldInput->Controllers[ControllerIndex];
-						game_controller_input *NewController = &NewInput->Controllers[ControllerIndex];
+						bool32 Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
+						bool32 Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
+						bool32 Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
+						bool32 Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
 
-						XINPUT_STATE ControllerState;
-						if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
+						Controller->IsAnalogue = true;
+						
+
+						real32 X = 0;
+
+						if(Pad->sThumbLX < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
 						{
-							//This controller is plugged in
-							XINPUT_GAMEPAD *Pad = &ControllerState.Gamepad;
-
-							bool32 Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
-							bool32 Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
-							bool32 Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
-							bool32 Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
-
-							NewController->IsAnalogue = true;
-							NewController->StartX = OldController->EndX;
-							NewController->StartY = OldController->EndY;
-
-							real32 X = 0;
-
-							if(Pad->sThumbLX < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-							{
-								//normalise the stick input 
-								X = (real32)((Pad->sThumbLX + XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32768.0f - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));  	
-							}
-							else if (Pad->sThumbLX > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-							{
-								X = (real32)((Pad->sThumbLX - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32767.0f  - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));
-							}
-							NewController->MinX = NewController->MaxX = NewController->EndX = X;
-
-							real32 Y = 0;
-							
-							if(Pad->sThumbLY < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-							{
-								//normalise the stick input 
-								Y = (real32)((Pad->sThumbLY + XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32768.0f - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));  	
-							}
-							else if (Pad->sThumbLY > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
-							{
-								Y = (real32)((Pad->sThumbLY - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32767.0f  - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));
-							}
-							NewController->MinY = NewController->MaxY = NewController->EndY = Y;
-
-							//TODO: implement Deadzone	
-							int16 LeftStickX = Pad->sThumbLX;
-							int16 LeftStickY = Pad->sThumbLY;
-							int16 RightStickX = Pad->sThumbRX;
-							int16 RightStickY = Pad->sThumbRY;
-							
-							//Not sure if I like this, maybe to start with only use analoguye stick in controller for movement and only 
-							//WASD on keyboard
-							//Eliminate ABXY on controller for now??
-#if 0
-							Win32ProcessXInputDigitalButton(Pad->wButtons, 
-															&OldController->A, XINPUT_GAMEPAD_A,
-															&NewController->A);
-							Win32ProcessXInputDigitalButton(Pad->wButtons, 
-															&OldController->B, XINPUT_GAMEPAD_B,
-															&NewController->B);
-							Win32ProcessXInputDigitalButton(Pad->wButtons, 
-															&OldController->X, XINPUT_GAMEPAD_X,
-															&NewController->X);
-							Win32ProcessXInputDigitalButton(Pad->wButtons, 
-															&OldController->Y, XINPUT_GAMEPAD_Y,
-															&NewController->Y);
-#endif															
-							Win32ProcessXInputDigitalButton(Pad->wButtons, 
-															&OldController->LeftShoulder, XINPUT_GAMEPAD_LEFT_SHOULDER,
-															&NewController->LeftShoulder);
-							Win32ProcessXInputDigitalButton(Pad->wButtons, 
-															&OldController->RightShoulder, XINPUT_GAMEPAD_RIGHT_SHOULDER,
-															&NewController->RightShoulder);
-
-							//bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
-							//bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
-					
-							//TODO: implement Deadzone
-							//uint8 LeftTrigger = Pad->bLeftTrigger;
-							//uint8 RightTrigger = Pad->bRightTrigger;
+							//normalise the stick input 
+							X = (real32)((Pad->sThumbLX + XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32768.0f - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));  	
 						}
+						else if (Pad->sThumbLX > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+						{
+							X = (real32)((Pad->sThumbLX - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32767.0f  - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));
+						}
+						Controller->StickX = X;
+
+						real32 Y = 0;
+						
+						if(Pad->sThumbLY < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+						{
+							//normalise the stick input 
+							Y = (real32)((Pad->sThumbLY + XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32768.0f - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));  	
+						}
+						else if (Pad->sThumbLY > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE)
+						{
+							Y = (real32)((Pad->sThumbLY - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE) / (32767.0f  - XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE));
+						}
+						Controller->StickY = Y;
+						
+						//Not sure if I like this, maybe to start with only use analoguye stick in controller for movement and only 
+						//WASD on keyboard
+						//Eliminate ABXY on controller for now??
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&Controller->A, XINPUT_GAMEPAD_A);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&Controller->B, XINPUT_GAMEPAD_B);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&Controller->X, XINPUT_GAMEPAD_X);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&Controller->Y, XINPUT_GAMEPAD_Y);															
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&Controller->LeftShoulder, XINPUT_GAMEPAD_LEFT_SHOULDER);
+						Win32ProcessXInputDigitalButton(Pad->wButtons, 
+														&Controller->RightShoulder, XINPUT_GAMEPAD_RIGHT_SHOULDER);
+
+						//bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
+						//bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
+				
+						//TODO: implement Deadzone
+						//uint8 LeftTrigger = Pad->bLeftTrigger;
+						//uint8 RightTrigger = Pad->bRightTrigger;
 					}
+					
 
 
 					DWORD ByteToLock = 0;
@@ -691,23 +665,52 @@ WinMain(HINSTANCE Instance,
 					Buffer.Pitch = GlobalBuffer.Pitch;
 					
 					
-					//PatBlt(DeviceContext, 0, 0, GlobalBuffer.Width, GlobalBuffer.Height, BLACKNESS);
-					GameUpdateAndRender(&GameMemory ,NewInput, &Buffer, &SoundBuffer);
+					LARGE_INTEGER PreUpdateCounter;
+					QueryPerformanceCounter(&PreUpdateCounter);
 
+					real32 SetupMs = (PreUpdateCounter.QuadPart - StartCounter.QuadPart) / 1000.0f;
+
+
+					GameUpdateAndRender(&GameMemory ,&Input, &Buffer, &SoundBuffer);
+
+
+					LARGE_INTEGER PostUpdateCounter;
+					QueryPerformanceCounter(&PostUpdateCounter);
+
+					real32 UpdateMs = (PostUpdateCounter.QuadPart - PreUpdateCounter.QuadPart) / 1000.0f;
+
+					real32 FrameMs = (PostUpdateCounter.QuadPart - StartCounter.QuadPart) / 1000.0f;
+
+					real32 TargetMs = (1.0f/60.0f) * 1000;
+
+					real32 SleepMs = TargetMs - FrameMs;
+
+					//TODO: Fix this shit (probably wit opengl)
+					//atm this sleeps for like double the length of a frame at 60 fps
+					if(SleepMs > 0)
+					{
+						Sleep((uint32)SleepMs);
+					}
+
+					LARGE_INTEGER PostSleepCounter;
+					QueryPerformanceCounter(&PostSleepCounter);
+
+					real32 MsElapsed = ((PostSleepCounter.QuadPart - StartCounter.QuadPart) / 1000.0f);
+
+					//does this need to be done after the wait for 
 					if(SoundIsValid)
 					{
 						Win32FillSoundBuffer(&SoundOutput, &SoundBuffer, ByteToLock, BytesToWrite);
 					}
-					
+
 					win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 					Win32DisplayBufferInWindow(GlobalBuffer, Dimension, DeviceContext);
 
-					game_input *Temp = NewInput;
-					NewInput = OldInput;
-					OldInput = Temp;
+					//clear the Input struct for use next frame
+					Input = {};
 
-					//clear NewInput for use next frame
-					*NewInput = {};
+					LARGE_INTEGER EndCounter;
+					QueryPerformanceCounter(&EndCounter);
 				}
 			}
 
