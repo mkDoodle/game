@@ -31,6 +31,7 @@ global bool GlobalRunning;
 #include <windows.h>
 #include <dsound.h>
 #include <xinput.h>
+#include <stdio.h>
 
 #include "win32_game.h"
 
@@ -402,13 +403,13 @@ internal void
 Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
 								game_button_state *State, DWORD ButtonBit)
 {
-	State->EndedDown = ((XInputButtonState & ButtonBit) == ButtonBit);
+	State->Down = ((XInputButtonState & ButtonBit) == ButtonBit);
 }
 
 internal void
 Win32ProcessKeyboardDigitalButton(game_button_state *State, bool32 IsDown)
 {
-	State->EndedDown = IsDown;
+	State->Down = IsDown;
 }
 internal void
 Win32ProcessPendingMessages(HWND Window, game_keyboard_input *Keyboard)
@@ -711,6 +712,8 @@ WinMain(HINSTANCE Instance,
 
 					LARGE_INTEGER EndCounter;
 					QueryPerformanceCounter(&EndCounter);
+
+					real32 TotalMs = (EndCounter.QuadPart - StartCounter.QuadPart) / 1000.0f;
 				}
 			}
 

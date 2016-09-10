@@ -1,3 +1,20 @@
+internal int
+RoundReal32ToInt(real32 Value)
+{
+	int Result;
+
+	if((Value - (int)Value) >= 0.5)
+	{
+		Result = (int)Value + 1;
+	}
+	else 
+	{
+		Result = (int)Value;
+	}
+	return Result;
+}
+
+
 internal void
 DrawRentangle(game_offscreen_buffer *Buffer, 
 			  int MinX, int MinY, int MaxX, int MaxY,
@@ -85,35 +102,39 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 
 	game_state *GameState = (game_state *)Memory->PermanentStorage;
 	if(!Memory->IsInitialised)
-	{
-#if 0
-		char *Filename = __FILE__;
+	{	
+		player *Player = &GameState->Player;
 
-		debug_read_file_result File = DEBUGPlatformReadEntireFile(Filename);
-		if(File.Contents)
-		{
-			DEBUGPlatformWriteEntireFile("test.out", File.ContentsSize, File.Contents);
-			DEBUGPlatformFreeFileMemory(File.Contents);
-		}
-#endif
-		GameState->ToneHz = 256;
+		Player->X = 10.0f;
+		Player->Y = 10.0f;
+		Player->Width = 20.0f;
+		Player->Height = 20.0f;
+
+		Player->XVelocity = 0.0f;
+		Player->YVelocity = 0.0f;
+
+		Player->MaxXVelocity = 35.0f;
+		Player->MaxYVelocity = 30.0f;
+
+		Player->XAcceleration = 1.0f;
 
 		//this might be more appropriate to do in the platform layer
 		Memory->IsInitialised = true;
 	}
 
-	//some player variables
-	local_persist real32 PlayerX = 10;
-	local_persist real32 PlayerY = 10;
-	int PlayerWidth = 20;
-	int PlayerHeight = 20;
+	//
+	player *Player = &GameState->Player;
 
-	int PlayerSpeed = 5;
+	//int PlayerSpeed = 2;
 
-	local_persist real32 PlayerVelocityX = 0;
-	local_persist real32 PlayerVelocityY = 0;
+	local_persist bool32 AButtonPressedLastFrame = false;
 
 	local_persist bool32 Jumping = false;
+
+	local_persist bool32 OnLeftWall = false;
+	local_persist bool32 OnRightWall = false;
+
+	real32 WallStickFallSpeed = -2; 
 
 	//temp hardcoded latch between keyboarda and controller
 	Input->IsController = true;
@@ -122,139 +143,196 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	{
 		game_controller_input ControllerInput = Input->Controller;
 
+		//Stick
 		if(ControllerInput.IsAnalogue)
 		{
 			//Use analogue movement tuning
-
-			PlayerVelocityX += (ControllerInput.StickX * PlayerSpeed);
-			PlayerVelocityY += (ControllerInput.StickY * PlayerSpeed);
-#if 0
-			if(ControllerInput.StickX > 0.5f)
-			{
-				dX = 1;
-			}
-			else if (ControllerInput.StickX > -0.5f && ControllerInput.StickX < 0.5f)
-			{
-				dX = 0;
-			}
-			else if (ControllerInput.StickX < -0.5f)
-			{
-				dX = -1;
-			}
-
-			if(ControllerInput.StickY > 0.5f)
-			{
-				dY = 1;
-			}
-			else if (ControllerInput.StickY > -0.5f && ControllerInput.StickY < 0.5f)
-			{
-				dY = 0;
-			}
-			else if (ControllerInput.StickY < -0.5f)
-			{
-				dY = -1;
-			}
-#endif
-			
-			
-
-			//GameState->RedOffset +=  (int)(4.0f * (Input0->StickX));
-			//GameState->ToneHz = 256 + (int)(128.0f * (Input0->StickY));  
+			Player->XVelocity += (ControllerInput.StickX * Player->XAcceleration);
 		}
 		else
 		{
 			//use digital movement tuning
 		}
 
-		if(ControllerInput.A.EndedDown)
+		//Buttons
+		if(ControllerInput.A.Down)
 		{
-			if(!Jumping)
+			if(!Jumping && !AButtonPressedLastFrame)
 			{
 				Jumping = true;
-				PlayerVelocityY += 100;	
+				Player->YVelocity += 30;
 			}
+
+			if(OnLeftWall && !AButtonPressedLastFrame)
+			{
+				Player->XVelocity += 30;
+				Player->YVelocity += 30;
+			}
+
+			if(OnRightWall && !AButtonPressedLastFrame)
+			{
+				Player->XVelocity -= 30;
+				Player->YVelocity += 30;
+			}
+
+			AButtonPressedLastFrame = true;
+		}
+		else
+		{
+			AButtonPressedLastFrame = false;
 		}
 
-		if(ControllerInput.B.EndedDown)
+		if(ControllerInput.B.Down)
 		{
-			//GameState->GreenOffset += 1;
 			GlobalRunning = false;
 		}
 	}
 	else
 	{
-		game_keyboard_input *Keyboard = &Input->Keyboard;
-
-		if(Keyboard->Up.EndedDown)
-		{
-			PlayerY -= 10;
-		}
-		else if(Keyboard->Down.EndedDown)
-		{
-			PlayerY += 10;
-		}
-		else if(Keyboard->Left.EndedDown)
-		{
-			PlayerX -= 10;
-		}
-		else if(Keyboard->Right.EndedDown)
-		{
-			PlayerX += 10;
-		}
-
 	}
 
 	//player physics update
-	real32 Timestep = (1.0f / 60.0f);
-
-	real32 GravityAcceleration = 5.0f;
-
-	real32 FrictionX = (0.5f * PlayerVelocityX);
+	//real32 Timestep = (1.0f / 60.0f);
 
 
+	//gravity and ground resistance
+	real32 GravityAcceleration = 1.0f;
 
-	PlayerVelocityY -= GravityAcceleration;
+	real32 UpwardForce = 0.0f;
+	real32 DownwardForce = 0.0f;
 
-	PlayerX += PlayerVelocityX;
+	//Deal with Y Velocity stuff
+	DownwardForce = GravityAcceleration;
 
-	PlayerY -=  PlayerVelocityY;
+	if(Player->Y + Player->Height >= Buffer->Height)
+	{
+		UpwardForce = GravityAcceleration;
+	}
+	else if(OnLeftWall || OnRightWall)
+	{
+		UpwardForce = 0.5f * DownwardForce;
+		Player->MaxYVelocity = 20.0f;
+	}
+	else
+	{
+		UpwardForce = 0.0f;
+		Player->MaxYVelocity = 30.0f;
+	}
 
-	if(Jumping && PlayerY + PlayerHeight >= Buffer->Height)
+	//(GravityAcceleration - UpwardForce)
+
+	Player->YVelocity += (UpwardForce - DownwardForce);
+	
+	//enforce max velocity
+	if(Player->YVelocity > 0)
+	{	
+		if(Player->YVelocity > Player->MaxYVelocity)
+		{
+			Player->YVelocity = Player->MaxYVelocity;
+		}		
+	}
+	else if (Player->YVelocity < 0)
+	{
+		if(Player->YVelocity < -Player->MaxYVelocity)
+		{
+			Player->YVelocity = -Player->MaxYVelocity;
+		}
+	}
+
+	real32 ResistanceX = ((Player->XVelocity / Player->MaxXVelocity) * Player->XAcceleration);
+
+	//enforce max velocity
+	if(Player->XVelocity > 0)
+	{
+		Player->XVelocity -= ResistanceX;
+
+		if(Player->XVelocity > Player->MaxXVelocity)
+		{
+			Player->XVelocity = Player->MaxXVelocity;
+		}
+	}
+	else if(Player->XVelocity < 0)
+	{
+		Player->XVelocity -= ResistanceX;
+
+		if(Player->XVelocity < -Player->MaxXVelocity)
+		{
+			Player->XVelocity = -Player->MaxXVelocity;
+		}
+	}
+
+
+	//wall stick stuff
+	if(Player->X <= 0)
+	{
+		//Player->YVelocity = WallStickFallSpeed;
+		OnLeftWall = true;
+	}
+	else
+	{
+		OnLeftWall = false;
+	}
+
+	if((Player->X + Player->Width) >= Buffer->Width)
+	{
+		//Player->YVelocity = WallStickFallSpeed;
+		OnRightWall = true;
+	}
+	else 
+	{
+		OnRightWall = false;
+	}
+
+
+	Player->X += Player->XVelocity;
+
+	Player->Y -=  Player->YVelocity;
+
+
+	if(Jumping && (Player->Y + Player->Height >= Buffer->Height))
 	{
 		Jumping = false;
 	}
-
 	
 
 	//border collisions
-	if(PlayerX < 0)
+	//Left Wall
+	if(Player->X < 0)
 	{
-		PlayerX = 0;
+		Player->X = 0;
 	}
 
-	if((PlayerX + PlayerWidth) > Buffer->Width)
+	//Right Wall
+	if((Player->X + Player->Width) > Buffer->Width)
 	{
-		PlayerX = (real32)(Buffer->Width - PlayerWidth);
+		Player->X = (real32)(Buffer->Width - Player->Width);
 	}
 
-	if(PlayerY < 0)
+	//Top
+	if(Player->Y < 0)
 	{
-		PlayerY = 0;
+		Player->Y = 0;
 	}
 
-	if((PlayerY + PlayerHeight) > Buffer->Height)
+	//Bottom
+	if((Player->Y + Player->Height) > Buffer->Height)
 	{
-		PlayerY = (real32)(Buffer->Height - PlayerHeight);
+		Player->Y = (real32)(Buffer->Height - Player->Height);
+		
+		Player->YVelocity = 0;
 	}
-
-
-
-	//RenderAnimatedGradient(Buffer, GameState->RedOffset, GameState->GreenOffset);
 	
 	
+	//Fill Backgorund Black
 	DrawRentangle(Buffer, 0, 0, Buffer->Width, Buffer->Height, 0, 0, 0);
-	//this now will cause a bit of shit since players pos is in real32 and actual image is an 
-	//int approximation
-	DrawRentangle(Buffer, (int)PlayerX, (int)PlayerY, (int)(PlayerX + PlayerWidth), (int)(PlayerY + PlayerHeight), 255, 0, 0);
-	GameOutputSound(SoundBuffer, GameState->ToneHz);
+	//TODO: Fix square changing size due to this rounding
+	//Draw Player
+	DrawRentangle(Buffer, RoundReal32ToInt(Player->X), RoundReal32ToInt(Player->Y), 
+				  RoundReal32ToInt((Player->X + Player->Width)), RoundReal32ToInt((Player->Y + Player->Height)), 
+				  255, 0, 0);
+
+	//Draw Obstacles
+	//DrawRentangle(Buffer, 300, 150, 350, 600, 0, 0, 255);
+	//DrawRentangle(Buffer, 800, 150, 850, 600, 0, 0, 255);
+	GameOutputSound(SoundBuffer, 256);
 }

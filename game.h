@@ -70,7 +70,7 @@ struct game_sound_output_buffer
 
 struct game_button_state
 {
-	bool32 EndedDown;
+	bool32 Down;
 };
 struct game_controller_input 
 {
@@ -129,10 +129,23 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 
 
 
+struct player
+{
+	real32 X;
+	real32 Y;
+	real32 Width;
+	real32 Height;
+
+	real32 XVelocity;
+	real32 YVelocity;
+
+	real32 MaxXVelocity;
+	real32 MaxYVelocity;
+
+	real32 XAcceleration;
+};
 
 struct game_state
 {
-	int RedOffset;
-	int GreenOffset;
-	int ToneHz;
+	player Player;
 };
