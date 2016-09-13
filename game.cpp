@@ -262,10 +262,40 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	}
 
 
+	real32 ObstacleX = 300.0f;
+	real32 ObstacleY = 150.0f;
+	real32 ObstacleWidth = 50.0f;
+	real32 ObstacleHeight = 450.0f;
+
+	bool32 Collided = false;
+
+	//Very basic AABB Collision
+	if((Player->Y + Player->Height) < ObstacleY)
+	{
+		Collided = false;
+	}
+	else if(Player->Y > (ObstacleY + ObstacleHeight))
+	{
+		Collided = false;
+	}
+	else if (Player->X > (ObstacleX + ObstacleWidth)) 
+	{
+		Collided = false;
+	}
+	else if ((Player->X + Player->Width) < ObstacleX)
+	{
+		Collided = false;
+	}
+	else 
+	{
+		Collided = true;
+	}
+
+
+
 	//wall stick stuff
 	if(Player->X <= 0)
 	{
-		//Player->YVelocity = WallStickFallSpeed;
 		OnLeftWall = true;
 	}
 	else
@@ -275,26 +305,46 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 
 	if((Player->X + Player->Width) >= Buffer->Width)
 	{
-		//Player->YVelocity = WallStickFallSpeed;
 		OnRightWall = true;
 	}
 	else 
 	{
 		OnRightWall = false;
 	}
-
-
-	Player->X += Player->XVelocity;
-
-	Player->Y -=  Player->YVelocity;
-
-
-	if(Jumping && (Player->Y + Player->Height >= Buffer->Height))
-	{
-		Jumping = false;
-	}
 	
+	/*real32 NextPositionX = Player->X + Player->XVelocity;
+	real32 NextPositionY = Player->Y + Player->YVelocity;
 
+	if(NextPositionX < 0)
+	{
+		//Colided with Left edge of screen
+		Player->XVelocity = 0; 
+
+		//get as close as possible to the edge
+		while(NextPositionX >= 0.1)
+		{
+			NextPositionX -= 0.1;
+		}
+	}
+
+	if((NextPositionX + Player->Width) > Buffer->Width)
+	{
+		//Collided with Right edge of screen
+		Player->XVelocity = 0;
+	} 
+
+	if(NextPositionY < 0)
+	{
+		Player->YVelocity = 0;
+	}
+
+	if((Player->Y + Player->Height) > Buffer->Height)
+	{
+		Player->YVelocity = 0;
+	}*/ 
+	Player->X += Player->XVelocity;
+	Player->Y -= Player->YVelocity;
+	
 	//border collisions
 	//Left Wall
 	if(Player->X < 0)
@@ -321,6 +371,15 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 		
 		Player->YVelocity = 0;
 	}
+
+
+	if(Jumping && (Player->Y + Player->Height >= Buffer->Height))
+	{
+		Jumping = false;
+	}
+
+	//Player->X = NextPositionX;
+	//Player->Y = NextPositionY;
 	
 	
 	//Fill Backgorund Black
@@ -332,7 +391,11 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 				  255, 0, 0);
 
 	//Draw Obstacles
-	//DrawRentangle(Buffer, 300, 150, 350, 600, 0, 0, 255);
+	DrawRentangle(Buffer, RoundReal32ToInt(ObstacleX), RoundReal32ToInt(ObstacleY), 
+				  RoundReal32ToInt(ObstacleX + ObstacleWidth), RoundReal32ToInt(ObstacleY + ObstacleHeight),
+				  0, 0, 255);
 	//DrawRentangle(Buffer, 800, 150, 850, 600, 0, 0, 255);
+
+	//currently does nothing
 	GameOutputSound(SoundBuffer, 256);
 }
