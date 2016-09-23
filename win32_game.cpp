@@ -25,10 +25,11 @@ global bool GlobalRunning;
 
 #include <math.h>
 
+#include <windows.h>
+
 #include "game.h"
 #include "game.cpp"
 
-#include <windows.h>
 #include <dsound.h>
 #include <xinput.h>
 #include <stdio.h>

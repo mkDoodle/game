@@ -136,6 +136,9 @@ struct player
 	real32 Width;
 	real32 Height;
 
+	real32 NextX;
+	real32 NextY;
+
 	real32 XVelocity;
 	real32 YVelocity;
 

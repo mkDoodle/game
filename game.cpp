@@ -14,6 +14,37 @@ RoundReal32ToInt(real32 Value)
 	return Result;
 }
 
+internal bool32
+CheckAABBCollision(real32 X1, real32 Y1, real32 Width1, real32 Height1,
+				   real32 X2, real32 Y2, real32 Width2, real32 Height2)
+{
+	bool32 Collided;
+
+	//Very basic AABB Collision
+	if((Y1 + Height1) < Y2)
+	{
+		Collided = false;
+	}
+	else if(Y1 > (Y2 + Height2))
+	{
+		Collided = false;
+	}
+	else if (X1 > (X2 + Width2)) 
+	{
+		Collided = false;
+	}
+	else if ((X1 + Width1) < X2)
+	{
+		Collided = false;
+	}
+	else 
+	{
+		Collided = true;
+	}
+
+	return Collided;
+}
+
 
 internal void
 DrawRentangle(game_offscreen_buffer *Buffer, 
@@ -109,6 +140,9 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 		Player->Y = 10.0f;
 		Player->Width = 20.0f;
 		Player->Height = 20.0f;
+
+		Player->NextX = 0;
+		Player->NextY = 0;
 
 		Player->XVelocity = 0.0f;
 		Player->YVelocity = 0.0f;
@@ -261,36 +295,88 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 		}
 	}
 
-
+	Player->NextX = Player->X + Player->XVelocity;
+	Player->NextY = Player->Y - Player->YVelocity;
+	
+#if 0
 	real32 ObstacleX = 300.0f;
 	real32 ObstacleY = 150.0f;
 	real32 ObstacleWidth = 50.0f;
 	real32 ObstacleHeight = 450.0f;
 
-	bool32 Collided = false;
+	bool32 Collided = CheckAABBCollision(Player->NextX, Player->NextY, Player->Width, Player->Height,
+										 ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight);
 
-	//Very basic AABB Collision
-	if((Player->Y + Player->Height) < ObstacleY)
+	if(Collided)
 	{
-		Collided = false;
-	}
-	else if(Player->Y > (ObstacleY + ObstacleHeight))
-	{
-		Collided = false;
-	}
-	else if (Player->X > (ObstacleX + ObstacleWidth)) 
-	{
-		Collided = false;
-	}
-	else if ((Player->X + Player->Width) < ObstacleX)
-	{
-		Collided = false;
-	}
-	else 
-	{
-		Collided = true;
-	}
+		OutputDebugStringA("Collided\n");
 
+		Player->NextX = Player->X;
+		Player->NextY = Player->Y;
+
+		Collided = false;
+
+		while(!Collided)
+		{
+			local_persist bool32 FirstTime = true;
+			if(FirstTime)
+			{	
+				Player->NextX = Player->X;
+				Player->NextY = Player->Y;
+				FirstTime = false;
+			}
+
+			real32 PossibleNextX = Player->NextX;
+			real32 PossibleNextY = Player->NextY;
+
+			if(Player->XVelocity > 0)
+			{
+				PossibleNextX += 0.1f;
+			}
+			else if(Player->XVelocity < 0)
+			{
+				PossibleNextX -= 0.1f;
+			}
+
+			if(Player->YVelocity > 0)
+			{
+				PossibleNextY -= 0.1f;
+			}
+			else if(Player->YVelocity < 0)
+			{
+				PossibleNextY += 0.1f;
+			}
+
+			Collided = CheckAABBCollision(Player->NextX, Player->NextY, Player->Width, Player->Height,
+							   ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight);
+
+			if(!Collided)
+			{
+				Player->NextX = PossibleNextX;
+				Player->NextY = PossibleNextY;
+			}
+		}
+
+		/*for(Collided; 
+			!Collided;
+			Collided = CheckAABBCollision(Player->NextX, Player->NextY, Player->Width, Player->Height,
+							  			  ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight))
+		{
+			if(Player->XVelocity > 0)
+			{
+				Player->NextX += 0.1f;
+			}
+			else if(Player->XVelocity < 0)
+			{
+				Player->NextX -= 0.1f;
+			}
+		}*/
+		//move 1
+		//check collision
+		//if not collided move 0.1(?) again
+		//else if collided again do not move
+	}
+#endif
 
 
 	//wall stick stuff
@@ -342,8 +428,11 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	{
 		Player->YVelocity = 0;
 	}*/ 
-	Player->X += Player->XVelocity;
-	Player->Y -= Player->YVelocity;
+	//Player->X += Player->XVelocity;
+	//Player->Y -= Player->YVelocity;
+
+	Player->X = Player->NextX;
+	Player->Y = Player->NextY;
 	
 	//border collisions
 	//Left Wall
@@ -391,9 +480,9 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 				  255, 0, 0);
 
 	//Draw Obstacles
-	DrawRentangle(Buffer, RoundReal32ToInt(ObstacleX), RoundReal32ToInt(ObstacleY), 
+	/*DrawRentangle(Buffer, RoundReal32ToInt(ObstacleX), RoundReal32ToInt(ObstacleY), 
 				  RoundReal32ToInt(ObstacleX + ObstacleWidth), RoundReal32ToInt(ObstacleY + ObstacleHeight),
-				  0, 0, 255);
+				  0, 0, 255);*/
 	//DrawRentangle(Buffer, 800, 150, 850, 600, 0, 0, 255);
 
 	//currently does nothing
