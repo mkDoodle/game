@@ -298,15 +298,16 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	Player->NextX = Player->X + Player->XVelocity;
 	Player->NextY = Player->Y - Player->YVelocity;
 	
-#if 0
 	real32 ObstacleX = 300.0f;
-	real32 ObstacleY = 150.0f;
-	real32 ObstacleWidth = 50.0f;
-	real32 ObstacleHeight = 450.0f;
+	real32 ObstacleY = 300.0f;
+	real32 ObstacleWidth = 500.0f;
+	real32 ObstacleHeight = 350.0f;
 
 	bool32 Collided = CheckAABBCollision(Player->NextX, Player->NextY, Player->Width, Player->Height,
 										 ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight);
 
+
+	//push player as close to wall as possible
 	if(Collided)
 	{
 		OutputDebugStringA("Collided\n");
@@ -329,26 +330,11 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 			real32 PossibleNextX = Player->NextX;
 			real32 PossibleNextY = Player->NextY;
 
-			if(Player->XVelocity > 0)
-			{
-				PossibleNextX += 0.1f;
-			}
-			else if(Player->XVelocity < 0)
-			{
-				PossibleNextX -= 0.1f;
-			}
+			PossibleNextX += 0.1f * Player->XVelocity;
+			PossibleNextY -= 0.1f * Player->YVelocity;
 
-			if(Player->YVelocity > 0)
-			{
-				PossibleNextY -= 0.1f;
-			}
-			else if(Player->YVelocity < 0)
-			{
-				PossibleNextY += 0.1f;
-			}
-
-			Collided = CheckAABBCollision(Player->NextX, Player->NextY, Player->Width, Player->Height,
-							   ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight);
+			Collided = CheckAABBCollision(PossibleNextX, PossibleNextY, Player->Width, Player->Height,
+							   			  ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight);
 
 			if(!Collided)
 			{
@@ -356,28 +342,23 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 				Player->NextY = PossibleNextY;
 			}
 		}
-
-		/*for(Collided; 
-			!Collided;
-			Collided = CheckAABBCollision(Player->NextX, Player->NextY, Player->Width, Player->Height,
-							  			  ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight))
-		{
-			if(Player->XVelocity > 0)
-			{
-				Player->NextX += 0.1f;
-			}
-			else if(Player->XVelocity < 0)
-			{
-				Player->NextX -= 0.1f;
-			}
-		}*/
-		//move 1
-		//check collision
-		//if not collided move 0.1(?) again
-		//else if collided again do not move
 	}
-#endif
 
+	bool32 OnTopOfObstacle = false;
+
+	if(Collided)
+	{
+		if((Player->NextX + Player->Height) < ObstacleY)
+		{
+			OnTopOfObstacle = true;
+
+			Jumping = false;
+		}
+
+		if(Player->X > (ObstacleX + ObstacleWidth))
+		{
+			OnRightWall = true;		}
+	}
 
 	//wall stick stuff
 	if(Player->X <= 0)
@@ -480,9 +461,9 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 				  255, 0, 0);
 
 	//Draw Obstacles
-	/*DrawRentangle(Buffer, RoundReal32ToInt(ObstacleX), RoundReal32ToInt(ObstacleY), 
+	DrawRentangle(Buffer, RoundReal32ToInt(ObstacleX), RoundReal32ToInt(ObstacleY), 
 				  RoundReal32ToInt(ObstacleX + ObstacleWidth), RoundReal32ToInt(ObstacleY + ObstacleHeight),
-				  0, 0, 255);*/
+				  0, 0, 255);
 	//DrawRentangle(Buffer, 800, 150, 850, 600, 0, 0, 255);
 
 	//currently does nothing
