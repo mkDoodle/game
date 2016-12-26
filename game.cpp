@@ -47,7 +47,7 @@ CheckAABBCollision(real32 X1, real32 Y1, real32 Width1, real32 Height1,
 
 
 internal void
-DrawRentangle(game_offscreen_buffer *Buffer, 
+DrawRectangle(game_offscreen_buffer *Buffer, 
 			  int MinX, int MinY, int MaxX, int MaxY,
 			  int R, int G, int B)
 {
@@ -136,39 +136,25 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	{	
 		player *Player = &GameState->Player;
 
-		Player->X = 10.0f;
-		Player->Y = 10.0f;
+		Player->X = 500.0f;
+		Player->Y = 300.0f;
 		Player->Width = 20.0f;
 		Player->Height = 20.0f;
 
 		Player->NextX = 0;
 		Player->NextY = 0;
 
-		Player->XVelocity = 0.0f;
-		Player->YVelocity = 0.0f;
+		Player->Velocity.X = 0.0f;
+		Player->Velocity.Y = 0.0f;
 
-		Player->MaxXVelocity = 35.0f;
-		Player->MaxYVelocity = 30.0f;
-
-		Player->XAcceleration = 1.0f;
+		Player->XAcceleration = 10.0f;
+		Player->YAcceleration = 10.0f;
 
 		//this might be more appropriate to do in the platform layer
 		Memory->IsInitialised = true;
 	}
 
-	//
 	player *Player = &GameState->Player;
-
-	//int PlayerSpeed = 2;
-
-	local_persist bool32 AButtonPressedLastFrame = false;
-
-	local_persist bool32 Jumping = false;
-
-	local_persist bool32 OnLeftWall = false;
-	local_persist bool32 OnRightWall = false;
-
-	real32 WallStickFallSpeed = -2; 
 
 	//temp hardcoded latch between keyboarda and controller
 	Input->IsController = true;
@@ -176,241 +162,73 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	if(Input->IsController)
 	{
 		game_controller_input ControllerInput = Input->Controller;
+		
+		//Reset Player's Velocity
+		Player->Velocity = {};
 
 		//Stick
 		if(ControllerInput.IsAnalogue)
 		{
 			//Use analogue movement tuning
-			Player->XVelocity += (ControllerInput.StickX * Player->XAcceleration);
+			Player->Velocity.X = (ControllerInput.StickX * Player->XAcceleration);
+			Player->Velocity.Y = (ControllerInput.StickY * Player->YAcceleration);
 		}
 		else
 		{
-			//use digital movement tuning
+			//use digital movement tuning		
 		}
 
 		//Buttons
-		if(ControllerInput.A.Down)
-		{
-			if(!Jumping && !AButtonPressedLastFrame)
-			{
-				Jumping = true;
-				Player->YVelocity += 30;
-			}
-
-			if(OnLeftWall && !AButtonPressedLastFrame)
-			{
-				Player->XVelocity += 30;
-				Player->YVelocity += 30;
-			}
-
-			if(OnRightWall && !AButtonPressedLastFrame)
-			{
-				Player->XVelocity -= 30;
-				Player->YVelocity += 30;
-			}
-
-			AButtonPressedLastFrame = true;
-		}
-		else
-		{
-			AButtonPressedLastFrame = false;
-		}
-
-		if(ControllerInput.B.Down)
+		if(ControllerInput.B.IsDown)
 		{
 			GlobalRunning = false;
 		}
 	}
-	else
+
+	if(!Input->IsController)
 	{
+		game_keyboard_input KeyboardInput = Input->Keyboard;
+
+		//Reset Player's Velocity
+		Player->Velocity = {};
+
+		//TODO: get this to work with holding keys down
+		if(KeyboardInput.Up.IsDown)
+		{
+			Player->Velocity.Y = Player->YAcceleration; 
+		}
+		if(KeyboardInput.Down.IsDown)
+		{
+			Player->Velocity.Y = -Player->YAcceleration;
+		}
+		if(KeyboardInput.Left.IsDown)
+		{
+			Player->Velocity.X = -Player->XAcceleration;
+		}
+		if(KeyboardInput.Right.IsDown)
+		{
+			Player->Velocity.X = Player->XAcceleration;
+		}
 	}
-
-	//player physics update
-	//real32 Timestep = (1.0f / 60.0f);
-
-
-	//gravity and ground resistance
-	real32 GravityAcceleration = 1.0f;
-
-	real32 UpwardForce = 0.0f;
-	real32 DownwardForce = 0.0f;
-
-	//Deal with Y Velocity stuff
-	DownwardForce = GravityAcceleration;
-
-	if(Player->Y + Player->Height >= Buffer->Height)
-	{
-		UpwardForce = GravityAcceleration;
-	}
-	else if(OnLeftWall || OnRightWall)
-	{
-		UpwardForce = 0.5f * DownwardForce;
-		Player->MaxYVelocity = 20.0f;
-	}
-	else
-	{
-		UpwardForce = 0.0f;
-		Player->MaxYVelocity = 30.0f;
-	}
-
-	//(GravityAcceleration - UpwardForce)
-
-	Player->YVelocity += (UpwardForce - DownwardForce);
 	
-	//enforce max velocity
-	if(Player->YVelocity > 0)
-	{	
-		if(Player->YVelocity > Player->MaxYVelocity)
-		{
-			Player->YVelocity = Player->MaxYVelocity;
-		}		
-	}
-	else if (Player->YVelocity < 0)
-	{
-		if(Player->YVelocity < -Player->MaxYVelocity)
-		{
-			Player->YVelocity = -Player->MaxYVelocity;
-		}
-	}
 
-	real32 ResistanceX = ((Player->XVelocity / Player->MaxXVelocity) * Player->XAcceleration);
 
-	//enforce max velocity
-	if(Player->XVelocity > 0)
-	{
-		Player->XVelocity -= ResistanceX;
-
-		if(Player->XVelocity > Player->MaxXVelocity)
-		{
-			Player->XVelocity = Player->MaxXVelocity;
-		}
-	}
-	else if(Player->XVelocity < 0)
-	{
-		Player->XVelocity -= ResistanceX;
-
-		if(Player->XVelocity < -Player->MaxXVelocity)
-		{
-			Player->XVelocity = -Player->MaxXVelocity;
-		}
-	}
-
-	Player->NextX = Player->X + Player->XVelocity;
-	Player->NextY = Player->Y - Player->YVelocity;
+	Player->NextX = Player->X + Player->Velocity.X;
+	Player->NextY = Player->Y - Player->Velocity.Y;
 	
-	real32 ObstacleX = 300.0f;
-	real32 ObstacleY = 300.0f;
-	real32 ObstacleWidth = 500.0f;
-	real32 ObstacleHeight = 350.0f;
+	real32 ObstacleX = 1000.0f;
+	real32 ObstacleY = 200.0f;
+	real32 ObstacleWidth = 100.0f;
+	real32 ObstacleHeight = 400.0f;
 
 	bool32 Collided = CheckAABBCollision(Player->NextX, Player->NextY, Player->Width, Player->Height,
 										 ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight);
 
 
-	//push player as close to wall as possible
-	if(Collided)
-	{
-		OutputDebugStringA("Collided\n");
 
-		Player->NextX = Player->X;
-		Player->NextY = Player->Y;
 
-		Collided = false;
-
-		while(!Collided)
-		{
-			local_persist bool32 FirstTime = true;
-			if(FirstTime)
-			{	
-				Player->NextX = Player->X;
-				Player->NextY = Player->Y;
-				FirstTime = false;
-			}
-
-			real32 PossibleNextX = Player->NextX;
-			real32 PossibleNextY = Player->NextY;
-
-			PossibleNextX += 0.1f * Player->XVelocity;
-			PossibleNextY -= 0.1f * Player->YVelocity;
-
-			Collided = CheckAABBCollision(PossibleNextX, PossibleNextY, Player->Width, Player->Height,
-							   			  ObstacleX, ObstacleY, ObstacleWidth, ObstacleHeight);
-
-			if(!Collided)
-			{
-				Player->NextX = PossibleNextX;
-				Player->NextY = PossibleNextY;
-			}
-		}
-	}
-
-	bool32 OnTopOfObstacle = false;
-
-	if(Collided)
-	{
-		if((Player->NextX + Player->Height) < ObstacleY)
-		{
-			OnTopOfObstacle = true;
-
-			Jumping = false;
-		}
-
-		if(Player->X > (ObstacleX + ObstacleWidth))
-		{
-			OnRightWall = true;		}
-	}
-
-	//wall stick stuff
-	if(Player->X <= 0)
-	{
-		OnLeftWall = true;
-	}
-	else
-	{
-		OnLeftWall = false;
-	}
-
-	if((Player->X + Player->Width) >= Buffer->Width)
-	{
-		OnRightWall = true;
-	}
-	else 
-	{
-		OnRightWall = false;
-	}
 	
-	/*real32 NextPositionX = Player->X + Player->XVelocity;
-	real32 NextPositionY = Player->Y + Player->YVelocity;
 
-	if(NextPositionX < 0)
-	{
-		//Colided with Left edge of screen
-		Player->XVelocity = 0; 
-
-		//get as close as possible to the edge
-		while(NextPositionX >= 0.1)
-		{
-			NextPositionX -= 0.1;
-		}
-	}
-
-	if((NextPositionX + Player->Width) > Buffer->Width)
-	{
-		//Collided with Right edge of screen
-		Player->XVelocity = 0;
-	} 
-
-	if(NextPositionY < 0)
-	{
-		Player->YVelocity = 0;
-	}
-
-	if((Player->Y + Player->Height) > Buffer->Height)
-	{
-		Player->YVelocity = 0;
-	}*/ 
-	//Player->X += Player->XVelocity;
-	//Player->Y -= Player->YVelocity;
 
 	Player->X = Player->NextX;
 	Player->Y = Player->NextY;
@@ -439,32 +257,27 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	{
 		Player->Y = (real32)(Buffer->Height - Player->Height);
 		
-		Player->YVelocity = 0;
+		Player->Velocity.Y = 0;
 	}
 
-
-	if(Jumping && (Player->Y + Player->Height >= Buffer->Height))
-	{
-		Jumping = false;
-	}
 
 	//Player->X = NextPositionX;
 	//Player->Y = NextPositionY;
 	
 	
 	//Fill Backgorund Black
-	DrawRentangle(Buffer, 0, 0, Buffer->Width, Buffer->Height, 0, 0, 0);
+	DrawRectangle(Buffer, 0, 0, Buffer->Width, Buffer->Height, 0, 0, 0);
 	//TODO: Fix square changing size due to this rounding
 	//Draw Player
-	DrawRentangle(Buffer, RoundReal32ToInt(Player->X), RoundReal32ToInt(Player->Y), 
+	DrawRectangle(Buffer, RoundReal32ToInt(Player->X), RoundReal32ToInt(Player->Y), 
 				  RoundReal32ToInt((Player->X + Player->Width)), RoundReal32ToInt((Player->Y + Player->Height)), 
 				  255, 0, 0);
 
 	//Draw Obstacles
-	DrawRentangle(Buffer, RoundReal32ToInt(ObstacleX), RoundReal32ToInt(ObstacleY), 
+	DrawRectangle(Buffer, RoundReal32ToInt(ObstacleX), RoundReal32ToInt(ObstacleY), 
 				  RoundReal32ToInt(ObstacleX + ObstacleWidth), RoundReal32ToInt(ObstacleY + ObstacleHeight),
 				  0, 0, 255);
-	//DrawRentangle(Buffer, 800, 150, 850, 600, 0, 0, 255);
+	//DrawRectangle(Buffer, 800, 150, 850, 600, 0, 0, 255);
 
 	//currently does nothing
 	GameOutputSound(SoundBuffer, 256);

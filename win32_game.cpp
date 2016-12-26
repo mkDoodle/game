@@ -404,13 +404,13 @@ internal void
 Win32ProcessXInputDigitalButton(DWORD XInputButtonState,
 								game_button_state *State, DWORD ButtonBit)
 {
-	State->Down = ((XInputButtonState & ButtonBit) == ButtonBit);
+	State->IsDown = ((XInputButtonState & ButtonBit) == ButtonBit);
 }
 
 internal void
 Win32ProcessKeyboardDigitalButton(game_button_state *State, bool32 IsDown)
 {
-	State->Down = IsDown;
+	State->IsDown = IsDown;
 }
 internal void
 Win32ProcessPendingMessages(HWND Window, game_keyboard_input *Keyboard)
@@ -509,7 +509,6 @@ WinMain(HINSTANCE Instance,
 			//because I'm not sharing it with anyone
 			//no release required
 			HDC DeviceContext = GetDC(Window);
-
 			
 			//Sound test
 			win32_sound_output SoundOutput = {};
