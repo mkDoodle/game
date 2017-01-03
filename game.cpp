@@ -136,8 +136,8 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	{	
 		player *Player = &GameState->Player;
 
-		Player->Centre.X = 100.0f;
-		Player->Centre.Y = 100.0f;
+		Player->Centre.X = 600.0f;
+		Player->Centre.Y = 300.0f;
 		
 		//TODO: consider removing these
 		Player->X = 500.0f;
@@ -168,7 +168,7 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	player *Player = &GameState->Player;
 
 	//temp hardcoded latch between keyboarda and controller
-	Input->IsController = true;
+	Input->IsController = false;
 
 	if(Input->IsController)
 	{
@@ -223,18 +223,50 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	}
 	
 
+	//collision checking
+	//have 2 objects
+	real32 ObstacleX = 1000.0f;
+	real32 ObstacleY = 200.0f;
+	real32 ObstacleWidth = 100.0f;
+	real32 ObstacleHeight = 400.0f;
+
+	//reduce player to apoint and increase other other object by that size
+	v2 PlayerPoint = Player->Centre;
+
+	real32 MSMinX = ObstacleX - Player->HalfWidth;
+	real32 MSMinY = ObstacleY - Player->HalfHeight;
+	real32 MSMaxX = ObstacleX + ObstacleWidth + Player->HalfWidth;
+	real32 MSMaxY = ObstacleY + ObstacleHeight + Player->HalfHeight;
+
+	//check against the sides and see if a collision happens within 1 timestep
+
+	//left side
+
+	#include <math.h>
+	real32 DX = MSMinX - PlayerPoint.X;
+	real32 DY = MSMinY - PlayerPoint.Y; 
+	real64 Hypotenuse = sqrt((DX * DX) + (DY * DY));
+
+	real32 DistanceAlongLine = MSMaxY - PlayerPoint.Y;
+
+	real64 Distance = sqrt((Hypotenuse * Hypotenuse) - (DistanceAlongLine * DistanceAlongLine));
+
+
+
+	//resolve
+	if(Distance < Player->Velocity.X)
+	{
+		Player->NextCentre.X = MSMinX;
+	}
+
 
 	Player->NextCentre.X = Player->Centre.X + Player->Velocity.X;
-	Player->NextCentre.Y = Player->Centre.Y + Player->Velocity.Y;
+	Player->NextCentre.Y = Player->Centre.Y - Player->Velocity.Y;
 
 	/*Player->NextX = Player->X + Player->Velocity.X;
 	Player->NextY = Player->Y - Player->Velocity.Y;*/
 	
 
-	real32 ObstacleX = 1000.0f;
-	real32 ObstacleY = 200.0f;
-	real32 ObstacleWidth = 100.0f;
-	real32 ObstacleHeight = 400.0f;
 
 #if 0
 	real32 ObstacleX = 300.0f;
@@ -385,8 +417,8 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 	DrawRectangle(Buffer, 0, 0, Buffer->Width, Buffer->Height, 0, 0, 0);
 	//TODO: Fix square changing size due to this rounding
 	//Draw Player
-	DrawRectangle(Buffer, RoundReal32ToInt(Player->Centre.X), RoundReal32ToInt(Player->Y), 
-				  RoundReal32ToInt((Player->X + Player->Width)), RoundReal32ToInt((Player->Y + Player->Height)), 
+	DrawRectangle(Buffer, RoundReal32ToInt(Player->Centre.X - Player->HalfWidth), RoundReal32ToInt(Player->Centre.Y - Player->HalfHeight), 
+				  RoundReal32ToInt((Player->Centre.X + Player->HalfWidth)), RoundReal32ToInt((Player->Centre.Y + Player->HalfHeight)), 
 				  255, 0, 0);
 
 	//Draw Obstacles

@@ -141,10 +141,10 @@ struct player
 	real32 Width;
 	real32 Height;
 	real32 HalfWidth;
-	Real32 HalfHeight;
+	real32 HalfHeight;
 
-	V2 Centre;
-	V2 NextCentre;
+	v2 Centre;
+	v2 NextCentre;
 
 	real32 NextX;
 	real32 NextY;
