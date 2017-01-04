@@ -158,7 +158,7 @@ GameUpdateAndRender(game_memory *Memory, game_input *Input, game_offscreen_buffe
 		Player->Velocity.X = 0.0f;
 		Player->Velocity.Y = 0.0f;
 
-		Player->XAcceleration = 10.0f;
+		Player->XAcceleration = 20.0f;
 		Player->YAcceleration = 10.0f;
 
 		//this might be more appropriate to do in the platform layer
